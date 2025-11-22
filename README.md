@@ -79,3 +79,45 @@ A built-in prompt template (`file_qa_prompt`) prepares a system/user message pai
 - If the server cannot find the model file, verify `MODEL_PATH` points to an existing `.gguf` file.
 - If you see `BLAS`/`accelerate` errors from `llama-cpp-python`, reinstall it with the appropriate build flags for your hardware.
 - Large files may be truncated if they exceed the configured maximum context length; consider summarizing them first.
+
+## Windows setup notes
+The server works on Windows (PowerShell) with the same code, but commands differ slightly:
+
+1) **Install dependencies** (PowerShell):
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+2) **Download a model** into `models\` using `huggingface-cli` (install with `python -m pip install huggingface_hub`). Example:
+```powershell
+python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct-GGUF qwen2.5-7b-instruct-q4_0.gguf --local-dir models
+```
+
+3) **Set environment variables** in the PowerShell session (adjust paths to your checkout):
+```powershell
+$Env:MODEL_PATH = "${PWD}\models\qwen2.5-7b-instruct-q4_0.gguf"
+$Env:CONTEXT_SIZE = "4096"
+$Env:N_THREADS = "8"
+$Env:ALLOWED_ROOT = "${PWD}"
+```
+
+4) **Start the MCP server** from the repository root:
+```powershell
+python .\mcp_server.py
+```
+
+5) **Client command configuration** typically needs absolute Windows paths, for example:
+```json
+{
+  "name": "local-llm-files",
+  "command": "C:/Python311/python.exe",
+  "args": ["C:/path/to/agent_test/mcp_server.py"],
+  "env": {
+    "MODEL_PATH": "C:/path/to/agent_test/models/qwen2.5-7b-instruct-q4_0.gguf"
+  }
+}
+```
+If `llama-cpp-python` reports missing runtime components, install the latest Visual C++ Redistributable from Microsoft.
