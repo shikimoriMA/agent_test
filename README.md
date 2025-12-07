@@ -54,7 +54,9 @@ huggingface-cli login
 选择 4bit 权重，下载到 `models/` 目录：
 ```cmd
 :: Qwen3 4bit
-python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct qwen2.5-7b-instruct-4bits --local-dir models
+huggingface-cli download Qwen/Qwen2.5-7B-Instruct ^
+  --local-dir models\Qwen2.5-7B-Instruct ^
+  --local-dir-use-symlinks False
 
 :: DeepSeek 4bit
 python -m huggingface_hub download deepseek-ai/DeepSeek-V2-Chat deepseek-v2-chat-4bits --local-dir models
