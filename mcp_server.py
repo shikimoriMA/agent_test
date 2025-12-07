@@ -90,10 +90,9 @@ def ask_local(question: str, path: Optional[str] = None) -> str:
     return _run_chat(question, context)
 
 
-@server.prompt_template()
-def file_qa_prompt(question: str, context: str) -> dict:
+# Define prompt template function implementation first, then try to register it
+def _file_qa_prompt_impl(question: str, context: str) -> dict:
     """Prompt template for MCP clients that support prompt construction."""
-
     return {
         "messages": [
             {
@@ -110,6 +109,19 @@ def file_qa_prompt(question: str, context: str) -> dict:
             },
         ]
     }
+
+
+# Some FastMCP builds may not implement prompt_template(); avoid AttributeError by registering conditionally.
+if hasattr(server, "prompt_template"):
+    try:
+        # server.prompt_template() likely returns a decorator; apply it to the implementation.
+        file_qa_prompt = server.prompt_template()(_file_qa_prompt_impl)
+    except Exception:
+        # If registration fails for any reason, keep the plain implementation to avoid startup crash.
+        file_qa_prompt = _file_qa_prompt_impl
+else:
+    # Fallback: expose the plain function so other code can call it directly.
+    file_qa_prompt = _file_qa_prompt_impl
 
 
 if __name__ == "__main__":
