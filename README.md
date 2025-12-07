@@ -44,6 +44,7 @@ python -m pip install -r requirements.txt
 > 如果 `bitsandbytes` 在 Windows CPU 环境报错，建议使用带 NVIDIA GPU 的机器；CPU 模式可以把环境变量 `LOAD_IN_4BIT` 设为 `0`，改为全精度加载（速度慢且内存占用大）。
 
 ### 4) 登录 Hugging Face（如需下载受限模型）
+python -m pip install "huggingface_hub[cli]"
 ```cmd
 python -m pip install --upgrade huggingface_hub
 huggingface-cli login
