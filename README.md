@@ -1,117 +1,117 @@
-# Windows Local 7B INT4 MCP Server (Command Prompt)
+# Windows 本地 7B INT4 MCP 服务 (cmd.exe)
 
-This repository is focused on **Windows cmd.exe** users who want to run a fully local 7B INT4 model (Qwen3 or DeepSeek) and expose it through an [MCP](https://modelcontextprotocol.io/) server. The server lets MCP clients read local files and answer questions without sending data off your machine.
+本仓库提供一个 **纯本地** 的 MCP 服务器，面向 Windows `cmd.exe` 用户，使用国产模型（如 Qwen3 / DeepSeek）加载 4bit 量化权重，支持：
+- 通过 MCP 工具读取本地文件。
+- 使用本地大模型回答问题，不上传数据。
 
-> If GitHub shows an older README, switch to the `codex/update-repository-for-local-deployment-of-7b-int4-model` (or `work`) branch for the latest content.
+> 如果 GitHub 页面显示旧版 README，请切换到 `work` 分支查看最新内容。
 
-## What you get
-- A minimal MCP server (`mcp_server.py`) that loads a local GGUF model with `llama_cpp`.
-- Tools:
-  - `read_file(path)`: read text files within an allowed directory root.
-  - `ask_local(question, path=None)`: answer questions, optionally grounded with a file.
-  - `file_qa_prompt(question, context)`: prompt template for MCP clients that support prompt construction.
+## 能力概览
+- `mcp_server.py`：使用 Hugging Face `transformers` 直接加载 Qwen/DeepSeek 等国产模型（支持 4bit）。
+- 提供工具：
+  - `read_file(path)`：在允许目录内读取文本文件。
+  - `ask_local(question, path=None)`：用本地模型回答问题，可选指定文件作为上下文。
+  - `file_qa_prompt(question, context)`：给支持 prompt 注入的 MCP 客户端使用。
 
-## Prerequisites (Windows)
-- Windows 10/11 64-bit.
-- Python 3.10+ (64-bit).
-- Git.
-- Microsoft Visual C++ Redistributable (latest x64) — required by `llama-cpp-python`.
-- 5–8 GB of disk space for a 7B INT4 GGUF model.
+## 环境要求（Windows）
+- Windows 10/11 64-bit
+- Python 3.10+ (64-bit)
+- Git
+- 有 NVIDIA GPU 且安装了 CUDA 驱动（推荐，用于 4bit 加速）；若无 GPU，运行速度会很慢
+- 10GB 以上磁盘空间用于模型（按需）
 
-## Step-by-step setup (cmd.exe)
-Run these commands in **Command Prompt** from the folder where you want the project.
+## Step-by-step（Command Prompt）
+以下命令全部在 **cmd.exe** 中执行。
 
-1) **Clone the repository**
+### 1) 克隆仓库
 ```cmd
 git clone <your-repo-url>
 cd agent_test
 ```
 
-2) **Create and activate a virtual environment**
+### 2) 创建并激活虚拟环境
 ```cmd
 python -m venv .venv
 .\.venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 ```
 
-3) **Install dependencies**
+### 3) 安装依赖
+`transformers` + `bitsandbytes` 用于加载 4bit 模型；`mcp` 用于 MCP 服务。
 ```cmd
 python -m pip install -r requirements.txt
 ```
-If you see build errors from `llama-cpp-python`, install the latest Visual C++ Redistributable, ensure you use 64-bit Python, and retry. On some systems you may need to set a generator (then reopen Command Prompt):
-```cmd
-setx CMAKE_GENERATOR "Visual Studio 17 2022"
-```
+> 如果 `bitsandbytes` 在 Windows CPU 环境报错，建议使用带 NVIDIA GPU 的机器；CPU 模式可以把环境变量 `LOAD_IN_4BIT` 设为 `0`，改为全精度加载（速度慢且内存占用大）。
 
-4) **(Optional) Log in to Hugging Face for gated models**
+### 4) 登录 Hugging Face（如需下载受限模型）
 ```cmd
 python -m pip install --upgrade huggingface_hub
 huggingface-cli login
 ```
 
-5) **Download a 7B INT4 GGUF model into `models/`**
-Create `models` automatically while downloading. Pick one:
+### 5) 下载国产 7B 模型（示例：Qwen3 / DeepSeek）
+选择 4bit 权重，下载到 `models/` 目录：
 ```cmd
-python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct-GGUF qwen2.5-7b-instruct-q4_0.gguf --local-dir models
-:: or
-python -m huggingface_hub download TheBloke/deepseek-llm-7B-chat-GGUF deepseek-llm-7b-chat-q4_0.gguf --local-dir models
-```
-Note the exact filename; you will set it in `MODEL_PATH`.
+:: Qwen3 4bit
+python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct qwen2.5-7b-instruct-4bits --local-dir models
 
-6) **Set environment variables for the current session**
-Replace the filename if you chose DeepSeek. `%CD%` keeps paths inside your checkout.
+:: DeepSeek 4bit
+python -m huggingface_hub download deepseek-ai/DeepSeek-V2-Chat deepseek-v2-chat-4bits --local-dir models
+```
+> 请根据实际仓库中的文件名填写环境变量。如果使用其他国产模型，也可替换为对应模型 ID。
+
+### 6) 设置环境变量（当前会话）
+将 `MODEL_ID` 替换为你下载的模型 ID。
 ```cmd
-set MODEL_PATH=%CD%\models\qwen2.5-7b-instruct-q4_0.gguf
-set CONTEXT_SIZE=4096
-set N_THREADS=8
-set N_BATCH=512
-set ALLOWED_ROOT=%CD%
-set TEMPERATURE=0.2
+set MODEL_ID=Qwen/Qwen2.5-7B-Instruct
+set LOAD_IN_4BIT=1
+set DEVICE_MAP=auto
 set MAX_OUTPUT_TOKENS=512
+set TEMPERATURE=0.2
+set ALLOWED_ROOT=%CD%
 ```
-Use `for %i in (mcp_server.py) do @echo %~fi` if you need an absolute script path for client configs.
+如果需要指定绝对路径，可用 `for %i in (mcp_server.py) do @echo %~fi` 查看脚本位置。
 
-7) **Start the MCP server**
-From the repository root with the virtual environment active:
+### 7) 启动 MCP 服务器
+在仓库根目录、虚拟环境已激活的情况下运行：
 ```cmd
 python .\mcp_server.py
 ```
-The server name is `local-llm-files`. The first launch may take time while the model loads.
+服务名为 `local-llm-files`，首次加载模型会稍慢。
 
-8) **Configure an MCP client (Windows paths)**
-Point your MCP-capable tool to the server command. Example JSON snippet:
+### 8) 配置 MCP 客户端
+以 JSON 片段为例（请使用绝对路径）：
 ```json
 {
   "name": "local-llm-files",
   "command": "C:/Python311/python.exe",
   "args": ["C:/path/to/agent_test/mcp_server.py"],
   "env": {
-    "MODEL_PATH": "C:/path/to/agent_test/models/qwen2.5-7b-instruct-q4_0.gguf",
-    "ALLOWED_ROOT": "C:/path/to/agent_test"
+    "MODEL_ID": "Qwen/Qwen2.5-7B-Instruct",
+    "ALLOWED_ROOT": "C:/path/to/agent_test",
+    "LOAD_IN_4BIT": "1",
+    "DEVICE_MAP": "auto"
   }
 }
 ```
-Use absolute Windows paths so the client can find both Python and the server script.
 
-9) **Use the tools from your client**
-- `read_file(path)`: reads text files within `ALLOWED_ROOT`.
-- `ask_local(question, path=None)`: answers questions with optional file grounding.
-- `file_qa_prompt(question, context)`: prompt template if your client supports prompt injection.
+### 9) 使用工具
+- `read_file(path)`：读取 `ALLOWED_ROOT` 范围内的文本文件。
+- `ask_local(question, path=None)`：向本地模型提问，可附带文件内容。
+- `file_qa_prompt(question, context)`：提供标准对话模板给 MCP 客户端。
 
-## Environment variable reference
-- `MODEL_PATH` (required): Absolute or relative path to the `.gguf` model file.
-- `ALLOWED_ROOT` (recommended): Directory boundary for file reads; defaults to the repo root.
-- `CONTEXT_SIZE`: Context tokens (default 4096).
-- `N_THREADS`: CPU threads for inference (defaults to available cores).
-- `N_BATCH`: Batch size (default 512). Reduce if you see memory issues.
-- `TEMPERATURE`: Sampling temperature (default 0.2).
-- `MAX_OUTPUT_TOKENS`: Max tokens returned (default 512).
+## 环境变量速查
+- `MODEL_ID`（必需）：Hugging Face 模型 ID，例如 `Qwen/Qwen2.5-7B-Instruct`。
+- `LOAD_IN_4BIT`：`1` 为 4bit 加载（需要 GPU + bitsandbytes）；`0` 为全精度。
+- `DEVICE_MAP`：`auto`（默认）或手动指定 GPU，如 `cuda:0`。
+- `ALLOWED_ROOT`：允许读取文件的目录根，默认仓库根。
+- `MAX_OUTPUT_TOKENS`：生成的最大新 token 数，默认 512。
+- `TEMPERATURE`：采样温度，默认 0.2。
 
-## Troubleshooting on Windows
-- **Model file not found**: Confirm `MODEL_PATH` matches the downloaded filename and path.
-- **`llama-cpp-python` build errors**: Install the x64 Visual C++ Redistributable; ensure you use 64-bit Python; consider reinstalling with `python -m pip install --force-reinstall llama-cpp-python` after setting `CMAKE_GENERATOR` if necessary.
-- **Execution policy blocks activation**: If PowerShell opens instead of cmd.exe, run Command Prompt as administrator or call the activation script directly with `cmd /k .\.venv\Scripts\activate.bat`.
-- **Slow or high memory usage**: Lower `CONTEXT_SIZE` or `N_BATCH`, or use fewer `N_THREADS`.
-- **File access denied**: Ensure paths you pass to `read_file` are under `ALLOWED_ROOT`.
+## 常见问题（Windows）
+- **bitsandbytes 安装失败**：需要支持 CUDA 的 NVIDIA GPU 和对应驱动。若无 GPU，可将 `LOAD_IN_4BIT=0`，但推理可能非常慢。
+- **显存不足**：尝试较小的 4bit 模型，或将 `MAX_OUTPUT_TOKENS` 降低。
+- **文件访问报错**：确保传入的路径在 `ALLOWED_ROOT` 下，且是文件而非目录。
+- **下载过慢/失败**：检查网络或使用镜像源；也可以提前手动下载模型放到 `models/` 目录并设置 `MODEL_ID`。
 
-With these steps, a Windows developer can clone, install, download a 7B INT4 model, start the MCP server, and wire it to an MCP client entirely on a local machine using Command Prompt.
+完成以上步骤后，即可在 Windows `cmd.exe` 中克隆仓库、下载国产模型、启动 MCP 服务器，并在支持 MCP 的客户端中调用本地模型回答与文件相关的问题。

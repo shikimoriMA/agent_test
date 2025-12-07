@@ -4,27 +4,32 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from llama_cpp import Llama
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from mcp.server.fastmcp import FastMCP
 
 
-DEFAULT_MODEL_PATH = Path("models/qwen2.5-7b-instruct-q4_0.gguf")
+DEFAULT_MODEL_ID = os.environ.get("MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
 DEFAULT_ALLOWED_ROOT = Path(os.environ.get("ALLOWED_ROOT", Path.cwd()))
 
 
-def _load_llama() -> Llama:
-    model_path = Path(os.environ.get("MODEL_PATH", DEFAULT_MODEL_PATH))
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"Missing model file at {model_path}. Set MODEL_PATH to a valid GGUF file."
-        )
+def _load_pipeline():
+    model_id = DEFAULT_MODEL_ID
+    load_in_4bit = os.environ.get("LOAD_IN_4BIT", "1") != "0"
+    device_map = os.environ.get("DEVICE_MAP", "auto")
 
-    return Llama(
-        model_path=str(model_path),
-        n_ctx=int(os.environ.get("CONTEXT_SIZE", 4096)),
-        n_threads=int(os.environ.get("N_THREADS", max(os.cpu_count() or 1, 1))),
-        n_batch=int(os.environ.get("N_BATCH", 512)),
-        verbose=False,
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_id,
+        device_map=device_map,
+        torch_dtype=torch.float16 if load_in_4bit else torch.float32,
+        load_in_4bit=load_in_4bit,
+    )
+
+    return pipeline(
+        "text-generation",
+        model=model,
+        tokenizer=tokenizer,
     )
 
 
@@ -44,7 +49,7 @@ def _validate_path(path: str) -> Path:
     return resolved
 
 
-llama = _load_llama()
+text_gen = _load_pipeline()
 server = FastMCP("local-llm-files")
 
 
@@ -57,29 +62,21 @@ def read_file(path: str) -> str:
 
 
 def _run_chat(question: str, context: str) -> str:
-    messages = [
-        {
-            "role": "system",
-            "content": (
-                "You are a local MCP assistant. You can only answer using the provided files "
-                "and must refuse to guess when information is missing."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Question: {question}\n\n"
-                f"Context from files:\n{context if context.strip() else '(no context provided)'}"
-            ),
-        },
-    ]
-
-    response = llama.create_chat_completion(
-        messages=messages,
-        temperature=float(os.environ.get("TEMPERATURE", 0.2)),
-        max_tokens=int(os.environ.get("MAX_OUTPUT_TOKENS", 512)),
+    prompt = (
+        "You are a local MCP assistant. Use only the provided context.\n"
+        "If the context is empty or insufficient, say you don't know.\n\n"
+        f"Question: {question}\n\nContext:\n{context if context.strip() else '(no context provided)'}\n\nAnswer:"
     )
-    return response["choices"][0]["message"]["content"]
+
+    outputs = text_gen(
+        prompt,
+        max_new_tokens=int(os.environ.get("MAX_OUTPUT_TOKENS", 512)),
+        temperature=float(os.environ.get("TEMPERATURE", 0.2)),
+        do_sample=True,
+        top_p=0.9,
+        num_return_sequences=1,
+    )
+    return outputs[0]["generated_text"].split("Answer:", 1)[-1].strip()
 
 
 @server.tool()
