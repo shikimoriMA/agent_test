@@ -1,59 +1,63 @@
 # Local 7B INT4 MCP Server
 
-This repository demonstrates how to run a fully local 7B INT4 model (Qwen or DeepSeek) and expose it through an [MCP](https://modelcontextprotocol.io/) server so that tools can query your local files and answer questions without leaving your machine.
+This repository demonstrates how to run a fully local 7B INT4 model (Qwen, DeepSeek, or Baichuan) and expose it through an [MCP](https://modelcontextprotocol.io/) server so that tools can query your local files and answer questions without leaving your machine. All recommended models are Chinese open-source releases—no llama-based checkpoints required.
 
 ## Prerequisites
 - Python 3.10+
 - A CPU-only setup works for Q4 (INT4) quantized models; GPU acceleration is optional if supported by your build of `llama.cpp`.
 - Sufficient disk space for the chosen GGUF model (~4–7 GB).
 
-## Step-by-step usage
+## Windows-first quickstart (PowerShell)
 1) **Clone the repo** and enter it:
-```bash
-git clone <this-repo-url> && cd agent_test
+```powershell
+git clone <this-repo-url>
+cd agent_test
 ```
 
 2) **Create a virtual environment** and install dependencies:
-```bash
+```powershell
 python -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-3) **Download a 7B INT4 GGUF model** into `./models`.
-   - Qwen3: `Qwen/Qwen2.5-7B-Instruct-GGUF` → `qwen2.5-7b-instruct-q4_0.gguf`
-   - DeepSeek: `TheBloke/deepseek-llm-7B-chat-GGUF` → `deepseek-llm-7b-chat-q4_0.gguf`
+3) **Download a Chinese 7B-ish INT4 GGUF model** into `models\`. All options avoid llama-based weights:
+   - Qwen3: `Qwen/Qwen2.5-7B-Instruct-GGUF` → `qwen2.5-7b-instruct-q4_0.gguf` (latest generation, 7B)
+   - DeepSeek: `TheBloke/deepseek-llm-7B-chat-GGUF` → `deepseek-llm-7b-chat-q4_0.gguf` (7B)
+   - Baichuan: `TheBloke/Baichuan2-7B-Chat-GGUF` → `baichuan2-7b-chat-q4_0.gguf` (7B)
 
-   Use `huggingface-cli` (requires a token for gated repos):
-```bash
-huggingface-cli download Qwen/Qwen2.5-7B-Instruct-GGUF qwen2.5-7b-instruct-q4_0.gguf --local-dir models
+   Use the built-in CLI (install with `python -m pip install huggingface_hub` if needed):
+```powershell
+python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct-GGUF qwen2.5-7b-instruct-q4_0.gguf --local-dir models
 # or
-huggingface-cli download TheBloke/deepseek-llm-7B-chat-GGUF deepseek-llm-7b-chat-q4_0.gguf --local-dir models
+python -m huggingface_hub download TheBloke/deepseek-llm-7B-chat-GGUF deepseek-llm-7b-chat-q4_0.gguf --local-dir models
+# or
+python -m huggingface_hub download TheBloke/Baichuan2-7B-Chat-GGUF baichuan2-7b-chat-q4_0.gguf --local-dir models
 ```
 
-4) **Configure environment variables** (adjust as needed):
-```bash
-export MODEL_PATH=models/qwen2.5-7b-instruct-q4_0.gguf
-export CONTEXT_SIZE=4096   # optional context window
-export N_THREADS=8         # optional CPU threads
-export ALLOWED_ROOT=$PWD   # optional: restrict file access to this repo
+4) **Configure environment variables** (adjust paths to your checkout):
+```powershell
+$Env:MODEL_PATH = "${PWD}\models\qwen2.5-7b-instruct-q4_0.gguf"
+$Env:CONTEXT_SIZE = "4096"   # optional context window
+$Env:N_THREADS = "8"         # optional CPU threads
+$Env:ALLOWED_ROOT = "${PWD}" # optional: restrict file access to this repo
 ```
 
-5) **Start the MCP server**:
-```bash
-python mcp_server.py
+5) **Start the MCP server** from the repository root:
+```powershell
+python .\mcp_server.py
 ```
 The server name is `local-llm-files` and exposes tools for reading files and asking questions with file-aware context.
 
-6) **Connect a client**. MCP-capable tools accept a `command` that launches the server. Example JSON config:
+6) **Connect a client**. MCP-capable tools accept a `command` that launches the server. Example JSON config with Windows paths:
 ```json
 {
   "name": "local-llm-files",
-  "command": "python",
-  "args": ["/absolute/path/to/mcp_server.py"],
+  "command": "C:/Python311/python.exe",
+  "args": ["C:/path/to/agent_test/mcp_server.py"],
   "env": {
-    "MODEL_PATH": "/absolute/path/to/models/qwen2.5-7b-instruct-q4_0.gguf"
+    "MODEL_PATH": "C:/path/to/agent_test/models/qwen2.5-7b-instruct-q4_0.gguf"
   }
 }
 ```
@@ -71,53 +75,13 @@ The server name is `local-llm-files` and exposes tools for reading files and ask
 ### Prompt template
 A built-in prompt template (`file_qa_prompt`) prepares a system/user message pair for MCP clients that support prompt templates. It expects `question` and `context` variables.
 
-## Notes on performance
-- Keep `CONTEXT_SIZE` modest (e.g., 4096) for better latency on CPUs.
-- INT4 quantization keeps memory use low; switching to Q5/Q8 files can improve quality at the cost of speed.
+## Notes for Linux/macOS users
+The same server runs on Unix-like systems with minor command changes:
 
-## Troubleshooting
-- If the server cannot find the model file, verify `MODEL_PATH` points to an existing `.gguf` file.
-- If you see `BLAS`/`accelerate` errors from `llama-cpp-python`, reinstall it with the appropriate build flags for your hardware.
-- Large files may be truncated if they exceed the configured maximum context length; consider summarizing them first.
+- Activate the virtual environment with `source .venv/bin/activate`.
+- Set environment variables using `export`, e.g. `export MODEL_PATH=$PWD/models/qwen2.5-7b-instruct-q4_0.gguf`.
+- Run the server with `python mcp_server.py`.
 
-## Windows setup notes
-The server works on Windows (PowerShell) with the same code, but commands differ slightly:
+Everything else (model locations, client configuration, and available tools) matches the Windows flow above.
 
-1) **Install dependencies** (PowerShell):
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-2) **Download a model** into `models\` using `huggingface-cli` (install with `python -m pip install huggingface_hub`). Example:
-```powershell
-python -m huggingface_hub download Qwen/Qwen2.5-7B-Instruct-GGUF qwen2.5-7b-instruct-q4_0.gguf --local-dir models
-```
-
-3) **Set environment variables** in the PowerShell session (adjust paths to your checkout):
-```powershell
-$Env:MODEL_PATH = "${PWD}\models\qwen2.5-7b-instruct-q4_0.gguf"
-$Env:CONTEXT_SIZE = "4096"
-$Env:N_THREADS = "8"
-$Env:ALLOWED_ROOT = "${PWD}"
-```
-
-4) **Start the MCP server** from the repository root:
-```powershell
-python .\mcp_server.py
-```
-
-5) **Client command configuration** typically needs absolute Windows paths, for example:
-```json
-{
-  "name": "local-llm-files",
-  "command": "C:/Python311/python.exe",
-  "args": ["C:/path/to/agent_test/mcp_server.py"],
-  "env": {
-    "MODEL_PATH": "C:/path/to/agent_test/models/qwen2.5-7b-instruct-q4_0.gguf"
-  }
-}
-```
-If `llama-cpp-python` reports missing runtime components, install the latest Visual C++ Redistributable from Microsoft.
+If `llama-cpp-python` reports missing runtime components, install the latest Visual C++ Redistributable on Windows or rebuild the wheel with the appropriate BLAS/accelerate support on Linux/macOS.
